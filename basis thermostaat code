@@ -1,0 +1,77 @@
+#include "DHT.h"
+
+
+// Pin configuratie
+#define DHTPIN 4          // DHT11 Data pin
+#define DHTTYPE DHT11     // Type sensor
+#define KNOP_UP 0         // Knop voor warmer
+#define KNOP_DOWN 1       // Knop voor kouder
+#define LED_KETEL 5       // LED simulatie ketel
+
+
+// Variabelen
+float gewensteTemp = 21.0; // Startwaarde
+float huidigeTemp = 0.0;
+unsigned long vorigeMeting = 0;
+
+
+DHT dht(DHTPIN, DHTTYPE);
+
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+ 
+  pinMode(LED_KETEL, OUTPUT);
+ 
+  pinMode(KNOP_UP, INPUT_PULLUP);
+  pinMode(KNOP_DOWN, INPUT_PULLUP);
+ 
+  Serial.println("Thermostaat actief - Lokaal menu");
+}
+
+
+void loop() {
+  // 1. Knoppen uitlezen
+  if (digitalRead(KNOP_UP) == LOW) {
+    gewensteTemp += 0.5;
+    if (gewensteTemp > 30.0) gewensteTemp = 30.0;
+    Serial.print("Instelling verhoogd naar: "); Serial.println(gewensteTemp);
+    delay(200); // debounce
+  }
+
+
+  if (digitalRead(KNOP_DOWN) == LOW) {
+    gewensteTemp -= 0.5;
+    if (gewensteTemp < 5.0) gewensteTemp = 5.0;
+    Serial.print("Instelling verlaagd naar: "); Serial.println(gewensteTemp);
+    delay(200); // Eenvoudige debounce
+  }
+
+
+  // 2. Temperatuur meten
+  if (millis() - vorigeMeting > 2000) {
+    vorigeMeting = millis();
+    float t = dht.readTemperature();
+
+
+    if (!isnan(t)) {
+      huidigeTemp = t;
+     
+      // 3. Thermostaat logica
+      if (huidigeTemp < (gewensteTemp - 0.2)) {
+        digitalWrite(LED_KETEL, HIGH); // Ketel AAN
+      }
+      else if (huidigeTemp > (gewensteTemp + 0.2)) {
+        digitalWrite(LED_KETEL, LOW);  // Ketel UIT
+      }
+
+
+      // 4. Weergave op Serial Monitor
+      Serial.print("Gemeten: "); Serial.print(huidigeTemp);
+      Serial.print("°C | Ingesteld: "); Serial.print(gewensteTemp);
+      Serial.print("°C | Status: ");
+      Serial.println(digitalRead(LED_KETEL) ? "VERWARMEN" : "UIT");
+    }
+  }
+}
