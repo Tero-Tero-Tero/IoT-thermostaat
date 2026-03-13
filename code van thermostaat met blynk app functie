@@ -1,0 +1,97 @@
+#define BLYNK_TEMPLATE_ID "TMPL5eT8d70Rr"
+#define BLYNK_TEMPLATE_NAME "toets 2"
+#define BLYNK_AUTH_TOKEN "vk5xdUQ44T7ON2RIGF0v6ovaeJ812yKs"
+
+// 2. Bibliotheken laden
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h> 
+#include "DHT.h"
+
+// 3. Pin definities
+#define DHTPIN 4          // DHT11 op GPIO 4
+#define DHTTYPE DHT11     
+#define KNOP_UP 0         // Knop omhoog op GPIO 0
+#define KNOP_DOWN 1       // Knop omlaag op GPIO 1
+#define LED_PIN 5         // Ketel LED op GPIO 5
+
+// 4. WiFi en Variabelen
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "embed";
+char pass[] = "weareincontrol";
+
+DHT dht(DHTPIN, DHTTYPE);
+BlynkTimer timer;
+
+float gewensteTemp = 28.0;
+float huidigeTemp = 0.0;
+
+// Deze functie wordt elke seconde uitgevoerd via de BlynkTimer
+void updateSysteem() {
+  float t = dht.readTemperature();
+  
+  if (!isnan(t)) {
+    huidigeTemp = t;
+    
+    // Stuur gegevens naar de Blynk cloud
+    Blynk.virtualWrite(V0, huidigeTemp);   // V0: Display thermometer
+    Blynk.virtualWrite(V1, gewensteTemp);  // V1: Houdt slider op telefoon synchroon
+    
+    // Thermostaat logica (Hysteresis van 0.25 graden)
+    if (huidigeTemp < (gewensteTemp - 0.25)) {
+      digitalWrite(LED_PIN, HIGH);
+      Blynk.virtualWrite(V2, 255); // V2: LED widget op AAN (fel)
+    } else if (huidigeTemp > (gewensteTemp + 0.25)) {
+      digitalWrite(LED_PIN, LOW);
+      Blynk.virtualWrite(V2, 0);   // V2: LED widget op UIT
+    }
+    
+    // Debug info in Serial Monitor
+    Serial.print("Huidig: "); Serial.print(huidigeTemp);
+    Serial.print(" | Doel: "); Serial.println(gewensteTemp);
+  }
+}
+
+// Luister naar aanpassingen in de Blynk App (Slider op V1)
+BLYNK_WRITE(V1) {
+  gewensteTemp = param.asFloat();
+  Serial.print("Nieuwe instelling via App: ");
+  Serial.println(gewensteTemp);
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  dht.begin();
+  pinMode(LED_PIN, OUTPUT);
+  
+  // Gebruik interne pull-ups voor de drukknoppen
+  pinMode(KNOP_UP, INPUT_PULLUP);
+  pinMode(KNOP_DOWN, INPUT_PULLUP);
+
+  // Maak verbinding met WiFi en Blynk
+  Blynk.begin(auth, ssid, pass);
+
+  // Start de timer (elke 1000ms = 1 seconde)
+  timer.setInterval(1000L, updateSysteem);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+
+  // Lokale bediening via drukknoppen
+  if (digitalRead(KNOP_UP) == LOW) {
+    gewensteTemp += 0.5;
+    if (gewensteTemp > 30) gewensteTemp = 30;
+    Blynk.virtualWrite(V1, gewensteTemp); // Update de app slider direct
+    delay(200); // Debounce
+  }
+
+  if (digitalRead(KNOP_DOWN) == LOW) {
+    gewensteTemp -= 0.5;
+    if (gewensteTemp < 5) gewensteTemp = 5;
+    Blynk.virtualWrite(V1, gewensteTemp); // Update de app slider direct
+    delay(200); // Debounce
+  }
+}
